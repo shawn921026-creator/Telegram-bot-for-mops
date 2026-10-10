@@ -3,3 +3,4 @@ secrets.json
 images/
 __pycache__/
 .DS_Store
+.deploy/
