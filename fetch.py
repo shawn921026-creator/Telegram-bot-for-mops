@@ -681,6 +681,10 @@ def revenue_key(code, info):
 
 # ---------- Main ----------
 
+# 本次執行抓到資料的公司數 / 總筆數；全部抓不到代表 MOPS 被擋或網路斷
+RUN_STATS = {"companies_ok": 0, "rows": 0}
+
+
 def process_material_info(seen, first_run, backfill_events=False):
     cutoff = datetime.now() - timedelta(days=LOOKBACK_DAYS)
     backfill_cutoff = datetime.now() - timedelta(days=EVENT_BACKFILL_DAYS)
@@ -689,6 +693,8 @@ def process_material_info(seen, first_run, backfill_events=False):
 
     for code, name in COMPANIES.items():
         rows = fetch_material_list(code)
+        RUN_STATS["companies_ok"] += bool(rows)
+        RUN_STATS["rows"] += len(rows)
         n_recent = 0
         for row in rows:
             try:
@@ -888,6 +894,11 @@ def main():
         f"seen {len(seen)} / rev {len(seen_rev)} ===\n")
 
     now = datetime.now()
+    state["last_run"] = dict(RUN_STATS, at=now.isoformat(timespec="seconds"),
+                             host="cloud" if os.environ.get("GITHUB_ACTIONS") else "local")
+    if RUN_STATS["companies_ok"] == 0 and state.get("blocked_alert") != now.date().isoformat():
+        if tg_send_message("⚠️ MOPS bot 這次抓不到任何公司的資料（可能被 MOPS 擋或網路異常）"):
+            state["blocked_alert"] = now.date().isoformat()
     hb = due_heartbeat(state, now)
     if hb and not first_run and not first_run_rev:
         tg_send_message(
