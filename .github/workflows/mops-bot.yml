@@ -1,0 +1,38 @@
+name: mops-bot
+
+on:
+  schedule:                         # GitHub 的 cron 是 UTC，台北 = UTC+8
+    - cron: "*/15 0-10 * * 1-5"     # 平日 08:00–18:45 每 15 分
+    - cron: "0 12-22/2 * * *"       # 每天 20:00–06:00 每 2 小時
+    - cron: "0 0-10/2 * * 0,6"      # 週末白天每 2 小時
+  workflow_dispatch:
+
+concurrency:
+  group: mops-bot
+  cancel-in-progress: false
+
+permissions:
+  contents: write                   # 把 seen / events 狀態寫回 repo
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      TZ: Asia/Taipei
+      BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+      CHAT_ID: ${{ secrets.CHAT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install font and Pillow
+        run: |
+          sudo apt-get install -y --no-install-recommends fonts-noto-cjk
+          pip install --quiet pillow
+      - run: python3 fetch.py
+      - name: Save state
+        if: always()
+        run: |
+          git config user.name "mops-bot"
+          git config user.email "mops-bot@users.noreply.github.com"
+          git add seen.json seen_revenue.json events.json state.json
+          git diff --cached --quiet || (git commit -q -m "state" && git push -q)

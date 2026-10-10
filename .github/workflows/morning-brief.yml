@@ -1,0 +1,19 @@
+name: morning-brief
+
+on:
+  schedule:
+    - cron: "20 0 * * *"            # 台北 08:20
+  workflow_dispatch:
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      TZ: Asia/Taipei
+      BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+      CHAT_ID: ${{ secrets.CHAT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: pip install --quiet yfinance
+      - run: python3 morning_brief.py
