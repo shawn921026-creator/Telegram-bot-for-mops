@@ -2,7 +2,9 @@ name: premarket
 
 on:
   schedule:
-    - cron: "5 0 * * 1-5"           # 台北 08:05 觸發，程式會等到 08:30 才發（GitHub cron 常延遲）
+    # GitHub 排程常延遲 30–60 分（甚至跳過），所以台北 07:20 就觸發（UTC 前一天 23:20，週日～週四），
+    # 程式抓完資料會等到 08:30 才發；晚到就抓完立刻發
+    - cron: "20 23 * * 0-4"
   workflow_dispatch:
 
 concurrency:
@@ -15,7 +17,7 @@ permissions:
 jobs:
   run:
     runs-on: ubuntu-latest
-    timeout-minutes: 50
+    timeout-minutes: 100
     env:
       TZ: Asia/Taipei
       BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
@@ -29,5 +31,5 @@ jobs:
         run: |
           git config user.name "mops-bot"
           git config user.email "mops-bot@users.noreply.github.com"
-          git add premarket_state.json
+          git add premarket_state.json holidays.json
           git diff --cached --quiet || (git commit -q -m "premarket state" && git pull -q --rebase && git push -q)

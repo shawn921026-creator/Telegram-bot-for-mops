@@ -82,16 +82,22 @@ def is_stock(code):
 # ─── 交易日 ───────────────────────────────────────────────────────────────────
 
 _closed = None
+HOLIDAY_FILE = BASE / "holidays.json"
+# 證交所 API 只回傳「最新公布」那一年，換年前拿不到今年的 → 手動補已知休市日，並把抓過的存檔累積
+KNOWN_CLOSED = {"2026-12-25"}  # 115 年行憲紀念日（週五）休市
 
 
 def closed_days():
     global _closed
     if _closed is None:
-        _closed = set()
-        roc = date.today().year - 1911
-        for y in (roc - 1, roc, roc + 1):
+        try:
+            saved = set(json.loads(HOLIDAY_FILE.read_text(encoding="utf-8")))
+        except Exception:
+            saved = set()
+        _closed = {date.fromisoformat(x) for x in saved | KNOWN_CLOSED}
+        for _ in (0,):
             d = get_json("https://www.twse.com.tw/rwd/zh/holidaySchedule/holidaySchedule"
-                         f"?response=json&queryYear={y}") or {}
+                         "?response=json") or {}
             for row in d.get("data") or []:
                 try:
                     day = date.fromisoformat(row[0])
@@ -101,6 +107,10 @@ def closed_days():
                 # 「開始交易日」「最後交易日」仍有交易；其餘（含「市場無交易」）休市
                 if day and ("無交易" in name or "交易" not in name):
                     _closed.add(day)
+        try:
+            HOLIDAY_FILE.write_text(json.dumps(sorted(x.isoformat() for x in _closed)), encoding="utf-8")
+        except Exception:
+            pass
     return _closed
 
 
@@ -194,12 +204,15 @@ def parse_self_settle(text):
 NOTICE_LOOKBACK_DAYS = 14  # 「近期多次達注意標準」的公告，當天不一定在注意名單上
 
 
-def notice_codes(d, state):
+def notice_codes(d, state, include_twse=True):
     """近 NOTICE_LOOKBACK_DAYS 天（到 d 為止）曾列注意股票的代號 → 名稱（上市 + 上櫃）"""
     codes = {}
     start = d - timedelta(days=NOTICE_LOOKBACK_DAYS)
-    tw = get_json("https://www.twse.com.tw/rwd/zh/announcement/notice?response=json&querytype=1"
-                  f"&startDate={start:%Y%m%d}&endDate={d:%Y%m%d}") or {}
+    if not include_twse:
+        tw = {}
+    else:
+        tw = get_json("https://www.twse.com.tw/rwd/zh/announcement/notice?response=json&querytype=1"
+                      f"&startDate={start:%Y%m%d}&endDate={d:%Y%m%d}") or {}
     for r in tw.get("data") or []:
         if is_stock(r[1]):
             codes[r[1]] = r[2].strip()
@@ -229,7 +242,8 @@ def section_self_settle(prev_day, today, state):
                 found[r["公司代號"]] = (r["公司名稱"].strip(), *res)
 
     # 2) 注意股票名單逐家查 MOPS（主要補上櫃；opendata 上櫃版會晚一天）
-    codes = notice_codes(prev_day, state)
+    # 即時跑：上市已由 opendata t187ap04_L 涵蓋，只需逐家查上櫃；回測才逐家查上市
+    codes = notice_codes(prev_day, state, include_twse=(today != date.today()))
     log(f"  notice stocks {prev_day}: {len(codes)}")
     for code, name in codes.items():
         if code in found:
