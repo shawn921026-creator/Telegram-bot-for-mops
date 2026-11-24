@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-盤前市場整理 → Telegram（每個交易日 08:30）
+盤前市場整理 → Telegram（每個交易日 08:00 開始抓，08:20 前發出）
 
 資料來源
 - 美股 / 指數 / 日韓：yfinance（前一交易日收盤）
@@ -31,7 +31,7 @@ from fetch import (BOT_TOKEN, CHAT_ID, fetch_material_detail,  # noqa: F401
 
 BASE = Path(__file__).resolve().parent
 STATE_FILE = BASE / "premarket_state.json"
-SEND_AT = (8, 30)
+START_AT = (8, 0)   # 08:00 開始抓資料，抓完（約 2–5 分）立刻發，08:20 前完成
 
 # 美股重點（顯示名稱, ticker），依漲跌幅由大到小排
 US_STOCKS = [
@@ -494,23 +494,19 @@ def main():
         return
 
     if not dry and not day_arg:
-        # GitHub cron 會提早觸發 / 延遲；提早就等到 08:30
-        target = datetime.combine(today, datetime.min.time()).replace(hour=SEND_AT[0], minute=SEND_AT[1])
-        wait = (target - datetime.now()).total_seconds() - 900  # 先預留 15 分鐘抓資料（逐家查 MOPS 約 3–5 分）
-        if 0 < wait < 3600:
-            log(f"  sleep {wait:.0f}s")
+        # GitHub 07:20 觸發（吸收排程延遲），等到 08:00 才開始抓；晚於 08:00 觸發就直接跑
+        target = datetime.combine(today, datetime.min.time()).replace(hour=START_AT[0], minute=START_AT[1])
+        wait = (target - datetime.now()).total_seconds()
+        if 0 < wait < 5400:
+            log(f"  sleep {wait:.0f}s until {START_AT[0]:02d}:{START_AT[1]:02d}")
             time.sleep(wait)
 
     msg = build(today)
     if dry:
         print(msg)
     else:
-        if not day_arg:
-            wait = (datetime.combine(today, datetime.min.time())
-                    .replace(hour=SEND_AT[0], minute=SEND_AT[1]) - datetime.now()).total_seconds()
-            if 0 < wait < 600:
-                time.sleep(wait)
         tg_send_long(msg)
+        log(f"  sent at {datetime.now():%H:%M:%S}")
     log("=== premarket done ===")
 
 
