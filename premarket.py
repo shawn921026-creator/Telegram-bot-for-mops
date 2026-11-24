@@ -17,6 +17,7 @@
 - 交易日：證交所休市日 + 週末
 """
 import json
+import os
 import re
 import sys
 import time
@@ -461,7 +462,8 @@ def build(today):
     prev_day = shift_trading_day(today, -1)
     next_day = shift_trading_day(today, 1)
     state = load_state()
-    parts = [f"盤前市場整理_{today:%Y_%m%d}"]
+    tag = os.environ.get("PREMARKET_TAG", "")  # 例：排程測試時加【排程測試】
+    parts = [f"{tag}盤前市場整理_{today:%Y_%m%d}"]
     for name, fn in [
         ("markets", lambda: section_markets(today)),
         ("self_settle", lambda: section_self_settle(prev_day, today, state)),
