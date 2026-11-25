@@ -492,6 +492,11 @@ def main():
     if not force and not is_trading_day(today):
         log(f"  {today} 非交易日，略過")
         return
+    # GitHub 排程會掉，所以設了好幾個觸發時間；今天已發過就跳過（手動 Run workflow 不受影響）
+    scheduled = os.environ.get("GITHUB_EVENT_NAME") == "schedule"
+    if scheduled and load_state().get("last_sent") == today.isoformat():
+        log(f"  {today} 已發過，略過")
+        return
 
     if not dry and not day_arg:
         # GitHub 07:20 觸發（吸收排程延遲），等到 08:00 才開始抓；晚於 08:00 觸發就直接跑
@@ -505,8 +510,12 @@ def main():
     if dry:
         print(msg)
     else:
-        tg_send_long(msg)
-        log(f"  sent at {datetime.now():%H:%M:%S}")
+        ok = tg_send_long(msg)
+        log(f"  sent at {datetime.now():%H:%M:%S} ok={ok}")
+        if ok and not day_arg:
+            st = load_state()
+            st["last_sent"] = today.isoformat()
+            save_state(st)
     log("=== premarket done ===")
 
 
