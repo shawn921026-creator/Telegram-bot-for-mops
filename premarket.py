@@ -456,6 +456,31 @@ def section_conferences(today):
     return "今日法說：" + ("、".join(names) or "無")
 
 
+# ─── Telegram（含重試）─────────────────────────────────────────────────────────
+
+def send_with_retry(text, limit=3800, tries=5):
+    """依行切成多則；每則失敗就重試（網路 / TLS 逾時常見），全部成功才回 True。"""
+    from fetch import tg_send_message
+    chunks, cur = [], ""
+    for line in text.split("\n"):
+        if len(cur) + len(line) + 1 > limit and cur:
+            chunks.append(cur)
+            cur = ""
+        cur += line + "\n"
+    chunks.append(cur)
+    all_ok = True
+    for c in (c.rstrip("\n") for c in chunks if c.strip()):
+        for i in range(tries):
+            if tg_send_message(c):
+                break
+            log(f"  retry TG chunk ({i + 1}/{tries})")
+            time.sleep(5 * (i + 1))
+        else:
+            all_ok = False
+        time.sleep(0.5)
+    return all_ok
+
+
 # ─── Main ─────────────────────────────────────────────────────────────────────
 
 def build(today):
@@ -510,7 +535,7 @@ def main():
     if dry:
         print(msg)
     else:
-        ok = tg_send_long(msg)
+        ok = send_with_retry(msg)
         log(f"  sent at {datetime.now():%H:%M:%S} ok={ok}")
         if ok and not day_arg:
             st = load_state()
