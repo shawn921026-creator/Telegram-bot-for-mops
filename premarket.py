@@ -31,6 +31,7 @@ from fetch import (BOT_TOKEN, CHAT_ID, fetch_material_detail,  # noqa: F401
 
 BASE = Path(__file__).resolve().parent
 STATE_FILE = BASE / "premarket_state.json"
+AUTO_CUTOFF_HOUR = 10  # 自動觸發超過 10:00 才跑到就不發
 START_AT = (8, 0)   # 08:00 開始抓資料，抓完（約 2–5 分）立刻發，08:20 前完成
 
 # 美股重點（顯示名稱, ticker），依漲跌幅由大到小排
@@ -517,11 +518,16 @@ def main():
     if not force and not is_trading_day(today):
         log(f"  {today} 非交易日，略過")
         return
-    # GitHub 排程會掉，所以設了好幾個觸發時間；今天已發過就跳過（手動 Run workflow 不受影響）
-    scheduled = os.environ.get("GITHUB_EVENT_NAME") == "schedule"
-    if scheduled and load_state().get("last_sent") == today.isoformat():
-        log(f"  {today} 已發過，略過")
-        return
+    # 自動觸發（GitHub 排程 / cron-job.org / 本機 launchd 備援）：今天已發過就跳過；
+    # 太晚才啟動（GitHub 排程常延遲好幾小時）也跳過，避免下午收到過期的盤前。手動執行不受影響。
+    auto = os.environ.get("GITHUB_EVENT_NAME") == "schedule" or os.environ.get("PREMARKET_AUTO") == "1"
+    if auto:
+        if load_state().get("last_sent") == today.isoformat():
+            log(f"  {today} 已發過，略過")
+            return
+        if datetime.now().hour >= AUTO_CUTOFF_HOUR:
+            log(f"  自動觸發太晚（{datetime.now():%H:%M}），略過")
+            return
 
     if not dry and not day_arg:
         # GitHub 07:20 觸發（吸收排程延遲），等到 08:00 才開始抓；晚於 08:00 觸發就直接跑

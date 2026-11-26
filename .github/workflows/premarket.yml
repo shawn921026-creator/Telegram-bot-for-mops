@@ -4,13 +4,17 @@ on:
   schedule:
     # GitHub 排程常延遲 30–60 分（甚至直接跳過）；cron 是 UTC，前一天 23:xx = 台北 07:xx（週日～週四 = 台北週一～週五）
     # 程式等到 08:00 才開始抓，抓完立刻發（08:20 前）；晚到就直接跑
-    # 三個觸發時間（台北 07:10 / 07:30 / 07:50）：任何一個有跑到就會在 08:00 開抓，
-    # 先完成的那個發出後記下 last_sent，後面的排程看到就跳過
+    # 主力是 cron-job.org 每個交易日 08:00 呼叫 workflow_dispatch（auto=true）；本機 launchd 08:12 備援。
+    # 下面 GitHub 排程只是第三層保險（常延遲數小時，10:00 後才跑到會自動略過）
     - cron: "10 23 * * 0-4"
     - cron: "30 23 * * 0-4"
     - cron: "50 23 * * 0-4"
   workflow_dispatch:
     inputs:
+      auto:
+        description: "自動觸發（cron-job.org 用；今天已發過就略過）"
+        required: false
+        default: "false"
       tag:
         description: "標題前綴（測試用，例：【測試】）"
         required: false
@@ -32,6 +36,7 @@ jobs:
       BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
       CHAT_ID: ${{ secrets.CHAT_ID }}
       PREMARKET_TAG: ${{ inputs.tag }}
+      PREMARKET_AUTO: ${{ inputs.auto == 'true' && '1' || '' }}
     steps:
       - uses: actions/checkout@v4
       - run: pip install --quiet yfinance
